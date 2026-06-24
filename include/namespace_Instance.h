@@ -359,7 +359,9 @@ struct ModelHeader
 
 	// 0x30
 	// same as anim->0x14
-	u32 unk3;
+	// NOTE(native): conceptually a delta-array pointer for static (non-animated)
+	// models; widened to pointer-width to match ModelAnim.ptrDeltaArray.
+	uintptr_t unk3;
 
 	// 0x34
 	u32 numAnimations;
@@ -453,16 +455,19 @@ struct InstDrawPerPlayer
 	struct ModelFrame *ptrNextFrame;
 
 	// 0xc8
-	u32 ptrCommandList;
+	// NOTE(native): widened to pointer-width; see ModelHeader.ptrCommandList.
+	uintptr_t ptrCommandList;
 
 	// 0xcc
 	struct TextureLayout **ptrTexLayout;
 
 	// 0xd0
-	u32 ptrColorLayout; // maybe should be `u32*`
+	// NOTE(native): widened to pointer-width; copied from ModelHeader.ptrColors.
+	uintptr_t ptrColorLayout;
 
 	// 0xd4
-	int ptrDeltaArray;
+	// NOTE(native): widened to pointer-width; copied from ModelAnim.ptrDeltaArray.
+	uintptr_t ptrDeltaArray;
 
 	// 0xd8 - LOD index (0,1,2,3)
 	int lodIndex;

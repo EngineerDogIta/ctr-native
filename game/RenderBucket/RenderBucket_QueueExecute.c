@@ -1836,7 +1836,7 @@ static void RenderBucket_AdvanceInstanceAnimWord(struct Instance *inst, int game
 	RenderBucket_StoreInstanceAnimWord(inst, frame);
 }
 
-static struct ModelFrame *RenderBucket_GetFrame(struct Instance *inst, struct ModelHeader *mh, struct ModelFrame **nextFrameOut, int *deltaArrayOut,
+static struct ModelFrame *RenderBucket_GetFrame(struct Instance *inst, struct ModelHeader *mh, struct ModelFrame **nextFrameOut, uintptr_t *deltaArrayOut,
                                                 int *lastFrameAdvanceOut)
 {
 	struct ModelAnim *anim;
@@ -1871,7 +1871,7 @@ static struct ModelFrame *RenderBucket_GetFrame(struct Instance *inst, struct Mo
 	// NOTE(aalhendi): Retail 0x80070ca0-0x80070dfc checks ptrAnimations first,
 	// then carries current/next frame through s6/s1 plus ptrDeltaArray through
 	// IDPP 0xd4. Native keeps those values as explicit return values.
-	*deltaArrayOut = (int)anim->ptrDeltaArray;
+	*deltaArrayOut = (uintptr_t)anim->ptrDeltaArray;
 	frameIndex = (u16)inst->animFrame;
 	lastFrame = (anim->numFrames & 0x7fff) - 1;
 	*lastFrameAdvanceOut = lastFrame;
@@ -1910,7 +1910,7 @@ static struct RenderBucketEntry *RenderBucket_QueueDraw(struct Instance *inst, s
 	struct RenderBucketSplitState split;
 	MATRIX projectionMvp;
 	u32 queuedFlags;
-	int deltaArray;
+	uintptr_t deltaArray;
 	int lastFrameAdvance;
 	int lodIndex;
 	int lodExhausted;
@@ -2028,9 +2028,9 @@ static struct RenderBucketEntry *RenderBucket_QueueDraw(struct Instance *inst, s
 	idpp->unkEC = drawFunc;
 	idpp->unkF0 = uncompressFunc;
 	RenderBucket_WriteInstanceCallbackLabels(inst, queuedFlags);
-	idpp->ptrCommandList = (u32)mh->ptrCommandList;
+	idpp->ptrCommandList = mh->ptrCommandList;
 	idpp->ptrTexLayout = mh->ptrTexLayout;
-	idpp->ptrColorLayout = (u32)mh->ptrColors;
+	idpp->ptrColorLayout = (uintptr_t)mh->ptrColors;
 	idpp->instFlags = queuedFlags;
 	return rbi + 1;
 }

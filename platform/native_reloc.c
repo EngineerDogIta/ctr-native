@@ -339,7 +339,7 @@ static void Reloc64_ModelHeaderInto(struct Reloc64Ctx *ctx, char *src, struct Mo
 	dst->ptrCommandList = (uintptr_t)Reloc64_Resolve(ctx, *(uint32_t *)(src + DISC_MH_CMDLIST));
 	dst->ptrFrameData = Reloc64_Resolve(ctx, *(uint32_t *)(src + DISC_MH_FRAMEDATA));   // leaf
 	dst->ptrColors = Reloc64_Resolve(ctx, *(uint32_t *)(src + DISC_MH_COLORS));         // leaf
-	dst->unk3 = *(u32 *)(src + DISC_MH_UNK3);
+	dst->unk3 = (uintptr_t)Reloc64_Resolve(ctx, *(uint32_t *)(src + DISC_MH_UNK3));
 	dst->numAnimations = *(u32 *)(src + DISC_MH_NUMANIM);
 
 	// ptrTexLayout: array of TextureLayout* (leaf targets), length-less on disc
