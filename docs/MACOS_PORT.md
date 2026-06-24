@@ -269,9 +269,52 @@ length-less array's bound looks wrong, check whether the *map it's bounded
 by* is even populated before assuming the bounding heuristic itself is at
 fault.
 
-**Next crash:** `PROC_BirthWithObject` (`game/PROC.c`) — `LIST_RemoveFront`
-inlined into it dereferences a NULL-ish pointer (`0x100000008`, looks like a
-NULL list head plus an 8-byte field offset). Not yet investigated.
+**mediumStack JitPool overflow — DONE.** The `PROC_BirthWithObject`/
+`LIST_RemoveFront` crash above (and an alternate manifestation in
+`RenderBucket_PrepareDrawContext` with `inst=0x100000000`, same underlying
+corruption, surfacing at whichever consumer read it first in a given run)
+was caused by `struct CutsceneObj` (asserted `0x60`=96 bytes in retail, but
+`CTR_STATIC_ASSERT_LAYOUT` no-ops the size check on `__LP64__`) actually
+being **144 bytes** on this build, exceeding the shared `mediumStack`
+JitPool's hardcoded `0x88` (136-byte) item size from `MainInit.c`.
+`game/233/CS_Thread.c` made it worse by passing the stale retail size
+(`0x60`) instead of `sizeof(struct CutsceneObj)` to
+`PROC_BirthWithObject`/`INSTANCE_BirthWithThread`, so the pool's own safety
+check incorrectly passed and a full 144-byte object got written into a
+136-byte slot, corrupting the next free-list slot's header. Root-caused via
+a hardware watchpoint on `gGT->JitPools.mediumStack.free.first` and live
+`sizeof()`/`offsetof()` checks (the crash's `LinkedList` pointer didn't
+match the first guess, `JitPools.thread` — computing each pool's live
+offset from `gGT` pinned it to `mediumStack` instead). Fixed `CS_Thread.c`'s
+three call sites to pass `sizeof(struct CutsceneObj)` (matching every other
+caller in the codebase) and widened the pool's item size to `0xa8` (168,
+fits `struct WarpPad` at 160 too — `AH_WarpPad.c` already correctly passed
+`sizeof(struct WarpPad)`, so its safety check was silently rejecting every
+warp pad spawn against the old undersized pool, a separate non-crashing bug
+fixed by the same resize).
+
+**DrawTires_Solid.c / DrawTires_Reflection.c OT-slot truncation — DONE.**
+The deferred risk flagged during the OT-range fix above was real: both
+files' `DrawTiresSolidScratch`/`DrawTiresReflectionScratch` (hand-laid-out,
+byte-offset-addressed scratch mirrors, same `CTR_STATIC_ASSERT_LAYOUT`
+convention) store `otRangeNormal`/`otRangeSecondary` (copied from the
+now-`intptr_t` `InstDrawPerPlayer` fields) and derive `otRangeStart`/
+`otRangeEnd` from them — all four still `int`, crashing
+`DrawTiresSolid_LinkPrimitive` on the truncated dereference. Since
+`otRangeStart`/`otRangeEnd` are the last two fields in both 0x178-byte
+structs (nothing follows them) but `otRangeNormal`/`otRangeSecondary` sit
+earlier with ~40 unrelated fields and ~50 hardcoded-offset call sites
+between them, widened by **appending four new `intptr_t` fields at the end
+of each struct** instead of widening in place, leaving the original narrow
+fields as unused dead weight so no other offset moves — then redirected
+only the ~12 call sites per file that actually touch these four values.
+
+**Next crash:** Two new ones surfaced immediately after, not yet
+investigated: `CS_ScriptCmd_ReadOpcode_Main` (`game/233/CS_ScriptCmd.c:60`)
+with a wildly garbage address (not a simple truncation pattern — looks like
+genuinely misread cutscene script data), and a different garbage address in
+`RenderBucket_PrepareDrawContext` (different from the `0x100000000` pattern
+already fixed above).
 
 Background on why this is the architectural task — the MPK (and level) data are
 binary overlays whose **on-disc pointers are 4 bytes**:
