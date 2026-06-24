@@ -291,8 +291,8 @@ void MM_Title_SetTrophyDPP(void)
 	struct InstDrawPerPlayer *idpp1;
 	struct InstDrawPerPlayer *idpp2;
 	struct Title *title = D230.titleObj;
-	int e4;
-	int e8;
+	intptr_t e4;
+	intptr_t e8;
 	int dc;
 
 	if (title == NULL)

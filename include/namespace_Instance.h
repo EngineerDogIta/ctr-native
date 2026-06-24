@@ -479,8 +479,10 @@ struct InstDrawPerPlayer
 	struct ModelHeader *mh;
 
 	// 0xe4
-	int otRangeNormal;    // ptrOT + depthOffset
-	int otRangeSecondary; // ptrOT + depthOffset
+	// NOTE(native): widened to pointer-width; holds a real native OT-buffer
+	// pointer biased by a depth offset (RenderBucket_AllocateOTRange).
+	intptr_t otRangeNormal;    // ptrOT + depthOffset
+	intptr_t otRangeSecondary; // ptrOT + depthOffset
 	int unkEC;            // drawFunc1
 	int unkF0;            // drawFunc2
 
