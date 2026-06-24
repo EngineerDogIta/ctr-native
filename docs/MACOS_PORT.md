@@ -309,12 +309,42 @@ of each struct** instead of widening in place, leaving the original narrow
 fields as unused dead weight so no other offset moves — then redirected
 only the ~12 call sites per file that actually touch these four values.
 
-**Next crash:** Two new ones surfaced immediately after, not yet
-investigated: `CS_ScriptCmd_ReadOpcode_Main` (`game/233/CS_ScriptCmd.c:60`)
-with a wildly garbage address (not a simple truncation pattern — looks like
-genuinely misread cutscene script data), and a different garbage address in
-`RenderBucket_PrepareDrawContext` (different from the `0x100000000` pattern
-already fixed above).
+**RenderBucketEntry allocation + terminator write — DONE.** The
+`RenderBucket_PrepareDrawContext`/`inst=0x100000000` crash (and its
+`PROC_BirthWithObject`/`LIST_RemoveFront` twin from earlier) turned out to
+be one bug, not the mediumStack one originally suspected — that fix was
+real and necessary but didn't address this. `struct RenderBucketEntry`
+(`inst`/`instPlayerBase`, both real pointers, retail-asserted 8 bytes
+total, genuinely 16 bytes here) has two compounding issues:
+1. `MainInit.c`'s native path borrowed a fixed slice of static RDATA
+   scratch (`rdata.s_STATIC_GNORMALZ + 148`) sized for retail's 8-byte
+   entries — switched to a real `MEMPACK_AllocMem` call scaled to the real
+   entry size, since doubling usage of the static slice risked colliding
+   with whatever real data follows it.
+2. The actual crash cause: `RenderBucket_QueueAllInstances`
+   (`MainFrame_RenderFrame.c`) wrote the list terminator through `int
+   *RBI; *RBI = 0;` — on 64-bit this only zeroes the low 32 bits of
+   `entry->inst`, leaving high-bits garbage from the (non-zero-initialized)
+   freshly allocated slot. `RenderBucket_Execute`'s `entry->inst != 0` loop
+   then walks into that garbage. Every appearance of "inst=0x100000000" was
+   this same bug — same narrow write, different garbage in the high bits
+   depending on what was in memory. Retyped `RBI` to `struct
+   RenderBucketEntry *` and write `RBI->inst = 0` (full pointer width).
+
+Found via the same lldb technique as every fix this session: a conditional
+breakpoint on `RenderBucket_QueueDraw`'s entry never fired before the
+crash, ruling out bad data entering the pipeline and pointing at
+corruption after queuing. Verified: binary now runs **~64 seconds / 2000
+frames** before its next crash — by far the longest stable run this
+session.
+
+**Next crash, confirmed independent (not RenderBucketEntry-related —
+reproduces with a valid `cs` pointer):** `CS_ScriptCmd_ReadOpcode_Main`
+(`game/233/CS_ScriptCmd.c:60`) — `cs->currOpcode[0]` reads a wildly garbage
+address. Not yet investigated. `struct CutsceneObj` itself was already
+audited (its pointer fields are correctly widened); the cause is likely
+elsewhere (script data loading/relocation, or another consumer of the
+cutscene system).
 
 Background on why this is the architectural task — the MPK (and level) data are
 binary overlays whose **on-disc pointers are 4 bytes**:
