@@ -16,8 +16,9 @@ below.
   pointer-width-correct.
 - **Current state:** the arm64 binary builds, links, launches, and boots/idles
   stably against real NTSC-U assets — the model pack, level, and driver-model
-  relocation gaps (Milestone M3) are all fixed. Driving an actual race
-  (Milestone M4) hasn't been verified yet; that's the next manual play session.
+  relocation gaps (Milestone M3) and the per-frame render-path field
+  widening (Milestone M4) are fixed. Driving an actual race (Milestone M5)
+  is blocked on a `PROC_BirthWithObject` crash; not yet investigated.
 
 ## Why this is hard
 
@@ -226,18 +227,51 @@ breakpoint just before it once the failure mode is understood), inspect the
 actual pointer value, recognize it as a 32-bit-truncated address, find the
 narrow field/parameter upstream.
 
-**Next crash (start of M4, paused here deliberately):** with all of the
-above fixed, the game reaches `MainFrame_RenderFrame` — the actual per-frame
-render path — before crashing in `RenderBucket_CopyScratchColorCache`
-reading `ctx->idpp->ptrCommandList`. This is `struct InstDrawPerPlayer`'s
-already-known truncating fields (`ptrCommandList`/`ptrColorLayout` are
-`u32`, `ptrDeltaArray` is `int`) — see M4 below. Tracing the write side shows
-this cascades further: `RenderBucket_GetFrame`'s `deltaArrayOut` parameter is
-`int *`, and `ModelHeader.unk3` (aliased the same way as `ptrDeltaArray`) is
-also still `u32`. Deliberately stopped here rather than starting M4's wider
-scope unannounced — picking up M4 means widening this whole field/parameter
-cluster across `RenderBucket_QueueExecute.c` and `AH_WarpPad.c`, not just the
-one struct.
+**M4 — render-path field widening: DONE.** Three crash-driven fixes, same
+technique as M3's Phase 4 chain:
+
+- `struct InstDrawPerPlayer.ptrCommandList`/`.ptrColorLayout`/
+  `.ptrDeltaArray` (`u32`/`u32`/`int`) were truncating real pointers copied
+  from `ModelHeader.ptrCommandList`/`ptrColors` and `ModelAnim.ptrDeltaArray`
+  — the crash in `RenderBucket_CopyScratchColorCache` reading
+  `ctx->idpp->ptrCommandList`. Widened all three to `uintptr_t`, plus
+  `RenderBucket_GetFrame`'s `deltaArrayOut` out-param and `ModelHeader.unk3`
+  (aliases `ptrDeltaArray` for static models, also needed
+  `Reloc64_Resolve` in `platform/native_reloc.c` instead of a raw copy).
+  Touches `include/namespace_Instance.h`, `RenderBucket_QueueExecute.c`,
+  `AH_WarpPad.c`, `native_reloc.c`.
+- `InstDrawPerPlayer.otRangeNormal`/`.otRangeSecondary` (`int`) — same
+  truncation shape, different cluster: `RenderBucket_AllocateOTRange`
+  allocates a real native OT-heap pointer and biases it through
+  `RenderBucket_AddressSubOffset`, which truncated it via
+  `(int)(u32)(uintptr_t)lhs` before storing. ~16 `*AtRange`/`*AtOTEntry`
+  function signatures and their local round-trips across
+  `RenderBucket_QueueExecute.c` (plus `MM_Title_SetTrophyDPP`'s `e4`/`e8`
+  locals) all widened to `intptr_t` to carry the value through intact.
+- `Reloc64_Level` discarded its own `ptrMapOffsets`/`numPtrs` parameters
+  (`ctx.ptrSet = NULL; ctx.ptrSetCount = 0;`), even though both real callers
+  (`LOAD_Callback_PatchMem`, `LOAD_Callback_LEV`) already pass a real
+  DRAM-pointer-map. Level-embedded `Model`/`ModelHeader` records (decorative
+  props baked directly into the LEV file, not the shared model pack) walk
+  through the same `Reloc64_ModelHeaderInto` as the model pack, and
+  `ModelHeader.ptrTexLayout`'s length (`Reloc64_PtrRunLen`) depends on that
+  map — with it empty, every level-embedded model's texture array sized to
+  0, and any `texIndex >= 1` read aliased whatever the bump allocator placed
+  next (caught live: the literal bytes of a `ModelAnim` named `"anim0"`).
+  Fixed by building `ctx.ptrSet` in `Reloc64_Level` the same way
+  `Reloc64_ModelPack` already does.
+
+Debugging note: the first diagnosis of the `ptrTexLayout` crash (an
+embedded-null entry truncating an otherwise-correct pointer-run heuristic)
+turned out wrong — live instrumentation showed `ctx->ptrSetCount == 0`
+entirely, not a gap in a populated map. Worth remembering: when a
+length-less array's bound looks wrong, check whether the *map it's bounded
+by* is even populated before assuming the bounding heuristic itself is at
+fault.
+
+**Next crash:** `PROC_BirthWithObject` (`game/PROC.c`) — `LIST_RemoveFront`
+inlined into it dereferences a NULL-ish pointer (`0x100000008`, looks like a
+NULL list head plus an 8-byte field offset). Not yet investigated.
 
 Background on why this is the architectural task — the MPK (and level) data are
 binary overlays whose **on-disc pointers are 4 bytes**:
@@ -268,14 +302,16 @@ part of whichever option is chosen (Option A relocates into the rebuilt struct;
 Option B keeps file-relative offsets and never adds `origin`). See the first
 "Known Gap" in `docs/MEMORY_MODEL.md`.
 
-### M4 — Playable
+### M4 — Render-path field widening: done (see above)
 
-With M3 done, drive past the loader into menus and a race. Expect further
-truncation/layout issues in the per-frame render and instance paths
-(`RenderBucket`, `InstDrawPerPlayer`, etc.) — the same two bug classes, found the
-same crash-driven way.
+### M5 — Playable
 
-### M5 — Distribution
+Drive past the per-frame render path into menus and an actual race. Expect
+further truncation/layout issues in the instance/spawn paths — the same bug
+classes, found the same crash-driven way. Currently blocked on
+`PROC_BirthWithObject`/`LIST_RemoveFront` (see above).
+
+### M6 — Distribution
 
 Ad-hoc `codesign` is already applied by the linker. For shipping: a proper
 signed/notarised `.app` bundle, a Universal binary if x86_64 is also wanted, and
