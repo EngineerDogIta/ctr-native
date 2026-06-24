@@ -241,8 +241,13 @@ void MainInit_JitPoolsNew(struct GameTracker *gGT)
 #ifndef CTR_NATIVE
 	gGT->ptrRenderBucketInstance = MEMPACK_AllocMem(renderBucketSize);
 #else
-	// NOTE(aalhendi): Native reuses static RDATA scratch for existing PC memory headroom.
-	gGT->ptrRenderBucketInstance = (void *)((uintptr_t)&rdata.s_STATIC_GNORMALZ[0] + 148);
+	// NOTE(native): retail's static-RDATA-scratch reuse trick sized this for
+	// 8-byte RenderBucketEntry slots; struct RenderBucketEntry's pointer
+	// fields are genuinely 8 bytes each on LP64 (16 bytes/entry), so
+	// borrowing the same fixed static-memory region risks colliding with
+	// whatever real retail data follows it. Allocate a real buffer instead,
+	// scaled to the same entry-count budget at the real (wider) entry size.
+	gGT->ptrRenderBucketInstance = MEMPACK_AllocMem(renderBucketSize * (int)sizeof(struct RenderBucketEntry) / 8);
 #endif
 
 	for (int i = 0; i < 3; i++)

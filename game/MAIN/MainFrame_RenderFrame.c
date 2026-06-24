@@ -616,7 +616,7 @@ void RenderAllBoxSceneSplitLines(struct GameTracker *gGT)
 void RenderBucket_QueueAllInstances(struct GameTracker *gGT)
 {
 	int lod;
-	int *RBI;
+	struct RenderBucketEntry *RBI;
 	int numPlyrCurrGame = gGT->numPlyrCurrGame;
 
 	if ((gGT->renderFlags & 0x20) == 0)
@@ -644,7 +644,11 @@ void RenderBucket_QueueAllInstances(struct GameTracker *gGT)
 #endif
 
 	// null terminator at end of list
-	*RBI = 0;
+	// NOTE(native): must zero the full pointer-width inst field -- a narrower
+	// write (e.g. through an int*) only clears the low 32 bits, leaving
+	// RenderBucket_Execute's `entry->inst != 0` terminator check seeing
+	// garbage in the high bits and walking past the real entries.
+	RBI->inst = 0;
 }
 
 void RenderAllNormalParticles(struct GameTracker *gGT)
