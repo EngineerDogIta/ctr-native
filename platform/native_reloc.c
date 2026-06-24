@@ -1099,19 +1099,26 @@ static struct VisMem *Reloc64_VisMem(struct Reloc64Ctx *ctx, uint32_t off, int n
 
 // Rebuild a just-loaded level file into a native structure and return the
 // pointer to store as sdata->ptrLevelFile. `levelBase` is the loaded file
-// body (what retail would relocate in place via LOAD_RunPtrMap);
-// `ptrMapOffsets`/`numPtrs` is the embedded DRAM pointer map -- unused here
-// since every level array has an explicit stored count or fixed size (unlike
-// the MPK's ptrTexLayout), kept for signature symmetry with Reloc64_ModelPack.
+// body (what retail would relocate in place via LOAD_RunPtrMap).
+// `ptrMapOffsets`/`numPtrs` is the embedded DRAM pointer map -- level-embedded
+// Model/ModelHeader records (decorative props baked directly into the LEV
+// file) walk through the same Reloc64_ModelHeaderInto as the model pack, and
+// ModelHeader.ptrTexLayout needs this map to size correctly (see
+// Reloc64_PtrRunLen), so it's built the same way Reloc64_ModelPack builds it.
 void *Reloc64_Level(void *levelBase, const int *ptrMapOffsets, int numPtrs)
 {
-	(void)ptrMapOffsets;
-	(void)numPtrs;
-
 	struct Reloc64Ctx ctx;
 	ctx.base = (char *)levelBase;
-	ctx.ptrSet = NULL;
-	ctx.ptrSetCount = 0;
+
+	// Build the sorted pointer-slot set (mask low bits like LOAD_RunPtrMap).
+	if (numPtrs < 0)
+		numPtrs = 0;
+	ctx.ptrSet = malloc((size_t)(numPtrs > 0 ? numPtrs : 1) * sizeof(uint32_t));
+	ctx.ptrSetCount = numPtrs;
+	for (int i = 0; i < numPtrs; i++)
+		ctx.ptrSet[i] = (uint32_t)((ptrMapOffsets[i] >> 2) << 2);
+	qsort(ctx.ptrSet, (size_t)numPtrs, sizeof(uint32_t), Reloc64_CmpU32);
+
 	ctx.visited = NULL;
 	ctx.visitedCount = 0;
 	ctx.visitedCap = 0;
@@ -1216,6 +1223,7 @@ void *Reloc64_Level(void *levelBase, const int *ptrMapOffsets, int numPtrs)
 
 	memset(dst->footer, 0, sizeof(dst->footer)); // unused by game code
 
+	free(ctx.ptrSet);
 	free(ctx.visited);
 
 	return dst;
