@@ -35,6 +35,14 @@ struct DrawTiresReflectionScratch
 	s16 depthOffsetEndBytes;
 	int otRangeStart;
 	int otRangeEnd;
+
+	// NOTE(native): otRangeNormal/Secondary/Start/End above stay narrow and
+	// unused -- widening them in place would shift every field after them.
+	// These wide mirrors carry the real native OT pointer instead.
+	intptr_t otRangeNormalPtr;
+	intptr_t otRangeSecondaryPtr;
+	intptr_t otRangeStartPtr;
+	intptr_t otRangeEndPtr;
 };
 
 CTR_STATIC_ASSERT_LAYOUT(offsetof(struct DrawTiresReflectionScratch, numPlyr) == 0x30);
@@ -63,6 +71,10 @@ CTR_STATIC_ASSERT_LAYOUT(offsetof(struct DrawTiresReflectionScratch, depthOffset
 CTR_STATIC_ASSERT_LAYOUT(offsetof(struct DrawTiresReflectionScratch, depthOffsetEndBytes) == 0x16e);
 CTR_STATIC_ASSERT_LAYOUT(offsetof(struct DrawTiresReflectionScratch, otRangeStart) == 0x170);
 CTR_STATIC_ASSERT_LAYOUT(offsetof(struct DrawTiresReflectionScratch, otRangeEnd) == 0x174);
+CTR_STATIC_ASSERT_LAYOUT(offsetof(struct DrawTiresReflectionScratch, otRangeNormalPtr) == 0x178);
+CTR_STATIC_ASSERT_LAYOUT(offsetof(struct DrawTiresReflectionScratch, otRangeSecondaryPtr) == 0x17c);
+CTR_STATIC_ASSERT_LAYOUT(offsetof(struct DrawTiresReflectionScratch, otRangeStartPtr) == 0x180);
+CTR_STATIC_ASSERT_LAYOUT(offsetof(struct DrawTiresReflectionScratch, otRangeEndPtr) == 0x184);
 CTR_STATIC_ASSERT_LAYOUT(sizeof(POLY_FT4) == 0x28);
 CTR_STATIC_ASSERT_LAYOUT(offsetof(POLY_FT4, r0) == 0x4);
 CTR_STATIC_ASSERT_LAYOUT(offsetof(POLY_FT4, x0) == 0x8);
@@ -88,8 +100,8 @@ static const u32 sDrawTiresReflectionJumpTable[8] = {
 struct DrawTiresReflectionProjectedWheel
 {
 	struct Icon *wheelSprite;
-	int selectedOT;
-	int selectedOTSlot;
+	intptr_t selectedOT;
+	intptr_t selectedOTSlot;
 	int jumpIndex;
 };
 
@@ -205,8 +217,8 @@ static void DrawTiresReflection_BuildWheelLocalPairs(struct DrawTiresReflectionS
 	DrawTiresReflection_WriteS32(scratch, 0x8c, wheelRearZ);
 	DrawTiresReflection_WriteS32(scratch, 0x94, wheelRearZ);
 
-	DrawTiresReflection_WriteS32(scratch, 0x40, idpp->otRangeNormal);
-	DrawTiresReflection_WriteS32(scratch, 0x44, idpp->otRangeSecondary);
+	scratch->otRangeNormalPtr = idpp->otRangeNormal;
+	scratch->otRangeSecondaryPtr = idpp->otRangeSecondary;
 	DrawTiresReflection_WriteS32(scratch, 0x48, (s16)driver->wheelSize);
 
 	steering = DrawTiresSolid_TrigAngleSinCos(driver->wheelRotation << 2);
@@ -402,7 +414,7 @@ static struct DrawTiresReflectionProjectedWheel DrawTiresReflection_SelectProjec
                                                                                          int wheelIndex)
 {
 	struct DrawTiresReflectionProjectedWheel selected;
-	int selectedOT = DrawTiresReflection_ReadS32(scratch, 0x44);
+	intptr_t selectedOT = scratch->otRangeSecondaryPtr;
 	u32 depthValue;
 	int angleValue;
 	int spriteIndex;
@@ -420,11 +432,11 @@ static struct DrawTiresReflectionProjectedWheel DrawTiresReflection_SelectProjec
 	gte_avsz4_b();
 	depthValue = MFC2(24);
 
-	DrawTiresReflection_WriteS32(scratch, 0x170, DrawTiresReflection_ReadS16(scratch, 0x16c) + selectedOT);
-	DrawTiresReflection_WriteS32(scratch, 0x174, DrawTiresReflection_ReadS16(scratch, 0x16e) + selectedOT);
+	scratch->otRangeStartPtr = DrawTiresReflection_ReadS16(scratch, 0x16c) + selectedOT;
+	scratch->otRangeEndPtr = DrawTiresReflection_ReadS16(scratch, 0x16e) + selectedOT;
 
 	gte_llv0_b();
-	selected.selectedOTSlot = selectedOT + (int)((depthValue >> 0x11) << 2);
+	selected.selectedOTSlot = selectedOT + (intptr_t)((depthValue >> 0x11) << 2);
 	angleValue = MFC2_S(9);
 	spriteIndex = DrawTiresSolid_SelectSpriteIndex(angleValue);
 	if (angleValue < 0)
@@ -445,7 +457,7 @@ static void DrawTiresReflection_CopyIconUV(POLY_FT4 *p, struct Icon *icon)
 	*(u32 *)&p->u3 = uv23 >> 16;
 }
 
-static int DrawTiresReflection_ApplyCornerOrder(struct DrawTiresReflectionScratch *scratch, int jumpIndex, int *selectedOTSlot, int sxy[4])
+static int DrawTiresReflection_ApplyCornerOrder(struct DrawTiresReflectionScratch *scratch, int jumpIndex, intptr_t *selectedOTSlot, int sxy[4])
 {
 	switch (jumpIndex)
 	{
@@ -522,11 +534,11 @@ static void DrawTiresReflection_WritePrimitiveCorners(POLY_FT4 *p, int sxy[4])
 	*(u32 *)&p->x3 = sxy[3];
 }
 
-static void DrawTiresReflection_LinkPrimitive(struct DrawTiresReflectionScratch *scratch, POLY_FT4 *p, int selectedOTSlot)
+static void DrawTiresReflection_LinkPrimitive(struct DrawTiresReflectionScratch *scratch, POLY_FT4 *p, intptr_t selectedOTSlot)
 {
 	uint32_t *otSlot;
-	int otRangeStart = DrawTiresReflection_ReadS32(scratch, 0x170);
-	int otRangeEnd = DrawTiresReflection_ReadS32(scratch, 0x174);
+	intptr_t otRangeStart = scratch->otRangeStartPtr;
+	intptr_t otRangeEnd = scratch->otRangeEndPtr;
 
 	if ((otRangeStart - selectedOTSlot) > 0)
 		selectedOTSlot = otRangeStart;
@@ -543,7 +555,7 @@ static void DrawTiresReflection_EmitProjectedWheel(struct DrawTiresReflectionScr
                                                    struct PrimMem *primMem, int *primCount, int centerOffset)
 {
 	POLY_FT4 *p = (POLY_FT4 *)primMem->cursor;
-	int selectedOTSlot = selected->selectedOTSlot;
+	intptr_t selectedOTSlot = selected->selectedOTSlot;
 	int sxy[4];
 	int splitDelta;
 
@@ -558,7 +570,7 @@ static void DrawTiresReflection_EmitProjectedWheel(struct DrawTiresReflectionScr
 	if (CtrTireDebug_ShouldLog(CTR_TIREDBG_REFLECT_PRIM) != 0)
 	{
 		fprintf(stderr, "[TIREDBG][reflect-prim] color=%08x code=%02x rgb=%02x,%02x,%02x tpage=%04x blend=%d clut=%04x jump=%d ot=%08x flags=%08x\n",
-		        scratch->tireColor, p->code, p->r0, p->g0, p->b0, p->tpage, (p->tpage >> 5) & 3, p->clut, selected->jumpIndex, selected->selectedOTSlot,
+		        scratch->tireColor, p->code, p->r0, p->g0, p->b0, p->tpage, (p->tpage >> 5) & 3, p->clut, selected->jumpIndex, (u32)selected->selectedOTSlot,
 		        scratch->instFlags);
 	}
 #endif
