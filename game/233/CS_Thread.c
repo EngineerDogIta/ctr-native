@@ -1203,7 +1203,7 @@ void CS_Thread_LInB(struct Instance *inst)
 	if (inst->thread != 0)
 		goto check_polar;
 
-	t = PROC_BirthWithObject(SIZE_RELATIVE_POOL_BUCKET(0x60, NONE, MEDIUM, STATIC), CS_Thread_ThTick, R233.s_introguy, 0);
+	t = PROC_BirthWithObject(SIZE_RELATIVE_POOL_BUCKET(sizeof(struct CutsceneObj), NONE, MEDIUM, STATIC), CS_Thread_ThTick, R233.s_introguy, 0);
 
 	inst->thread = t;
 
@@ -1400,7 +1400,7 @@ struct Thread *CS_Thread_Init(s16 modelID, const char *name, s16 *param_3, s16 p
 	{
 		inst = NULL;
 
-		t = PROC_BirthWithObject(SIZE_RELATIVE_POOL_BUCKET(0x60, NONE, MEDIUM, CAMERA), CS_Thread_ThTick, name, parent);
+		t = PROC_BirthWithObject(SIZE_RELATIVE_POOL_BUCKET(sizeof(struct CutsceneObj), NONE, MEDIUM, CAMERA), CS_Thread_ThTick, name, parent);
 
 		if (t == NULL)
 			return NULL;
@@ -1415,7 +1415,7 @@ struct Thread *CS_Thread_Init(s16 modelID, const char *name, s16 *param_3, s16 p
 		if ((u32)(modelID - NDI_KART0) < 4)
 			bucket = GHOST;
 
-		inst = INSTANCE_BirthWithThread(modelID, name, MEDIUM, bucket, CS_Thread_ThTick, 0x60, parent);
+		inst = INSTANCE_BirthWithThread(modelID, name, MEDIUM, bucket, CS_Thread_ThTick, (int)sizeof(struct CutsceneObj), parent);
 
 		if (inst == NULL)
 			return NULL;

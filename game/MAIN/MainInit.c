@@ -221,7 +221,12 @@ void MainInit_JitPoolsNew(struct GameTracker *gGT)
 	JitPool_Init(&gGT->JitPools.instance, renderBucketSize >> 5, sizeof(struct Instance) + (sizeof(struct InstDrawPerPlayer) * gGT->numPlyrCurrGame),
 	             rdata.s_InstancePool);
 	JitPool_Init(&gGT->JitPools.smallStack, (poolScale * 0x19) >> 10, 0x48, rdata.s_SmallStackPool);
-	JitPool_Init(&gGT->JitPools.mediumStack, poolScale >> 7, 0x88, rdata.s_MediumStackPool);
+	// NOTE(native): retail item size is 0x88; widened to 0xa8 because
+	// CutsceneObj/WarpPad now exceed it on LP64 (embedded host pointers
+	// grew those structs past their retail size -- CTR_STATIC_ASSERT_LAYOUT
+	// no-ops their size asserts on __LP64__, so the mismatch isn't caught
+	// at compile time).
+	JitPool_Init(&gGT->JitPools.mediumStack, poolScale >> 7, 0xa8, rdata.s_MediumStackPool);
 
 	int numDriver = poolScale >> 9;
 	if ((gameMode & MAIN_MENU) != 0)
