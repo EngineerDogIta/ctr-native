@@ -227,9 +227,9 @@ void INSTANCE_LevInitAll(struct InstDef *levInstDef, int numInst)
 		// pointer to InstDef in LEV
 		src = (int *)levInstDef;
 
-		// pointer to instance in pool,
-		// add 8 bytes to skip Prev and Next
-		dst = (int *)((uintptr_t)inst + 8);
+		// pointer to instance in pool, skip next+prev
+		// offsetof evaluates to 8 in retail (two 4-byte ptrs) and 16 on native (two 8-byte ptrs)
+		dst = (int *)((uintptr_t)inst + offsetof(struct Instance, name));
 
 		// copy InstDef data from LEV to instance pool
 		while (src != (int *)((uintptr_t)levInstDef + 0x20))
