@@ -11,6 +11,7 @@ repo is native platform glue that lets that source run on Windows/Linux via
 SDL3 instead of PS1 hardware/PsyQ.
 
 Guiding constraints (see README.md "Philosophy" for the full list):
+
 - No PSX toolchain — targets Windows/Linux, no MIPS compiler.
 - `main.c` owns process startup; host-specific details live in `platform/native_*`.
 - Fully static build, single executable, SDL3 vendored and statically linked.
@@ -77,6 +78,7 @@ links, scratchpad). Read `docs/MEMORY_MODEL.md` before touching anything that
 deals with `sdata`, `MEMPACK_*`, scratchpad offsets, or GPU primitive/OT links —
 struct field widths and offsets are load-bearing because retail code depends on
 addresses, not just field names. Key points:
+
 - `include/regionsEXE.h` types the resident `.rdata`/`.text`/`.data`/`.sdata`/`.bss`
   ranges as structs (full address table in `docs/DATA_SECTIONS.md`).
 - `sdata` (originally addressed via MIPS `$gp`) is mirrored as a plain global
