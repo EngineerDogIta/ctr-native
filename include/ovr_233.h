@@ -89,8 +89,9 @@ union CsOpcodeArg
 {
 	int i;
 	u32 u;
-	char *ptr;
+	u32 ptr; // retail 4-byte opcode address; cast to (char*)(uintptr_t) at use sites
 };
+_Static_assert(sizeof(union CsOpcodeArg) == 4, "CsOpcodeArg must stay 4 bytes on all targets");
 
 struct CsOpcodeMeta
 {
