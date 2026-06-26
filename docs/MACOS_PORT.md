@@ -346,6 +346,32 @@ audited (its pointer fields are correctly widened); the cause is likely
 elsewhere (script data loading/relocation, or another consumer of the
 cutscene system).
 
+**Session continuation — 4 more fixes (commits `03fc1603e`..`0da45760d`):**
+
+1. **`CsOpcodeArg::ptr` layout (`include/ovr_233.h`, `game/233/CS_Thread.c`).**
+   `union CsOpcodeArg` had `char *ptr`, making it 8 bytes on native and
+   silently shifting every `CsOpcodeMeta` field. Changed `ptr` to `u32`
+   (retail 4-byte opcode offset); added `_Static_assert(sizeof==4)`;
+   cast `(char *)(uintptr_t)` at the 3 branch-target use sites in CS_Thread.c.
+   This likely fixes the `CS_ScriptCmd_ReadOpcode_Main` garbage-read crash.
+
+2. **`INSTANCE_LevInitAll` skip offset (`game/INSTANCE.c`).** Hardcoded `+ 8`
+   to skip `next+prev` at Instance head was correct on retail (two 4-byte
+   pointers) but wrong on native (two 8-byte pointers). Changed to
+   `+ offsetof(struct Instance, name)` — evaluates to 8 or 16 automatically.
+
+3. **`sdata->ptrLoadSaveObj` truncation (`include/regionsEXE.h`,
+   `game/SelectProfile.c`).** Field typed `int` truncated the native heap
+   pointer on write; changed to `uintptr_t` (4B on 32-bit = layout preserved).
+
+4. **`Reloc64_SCVertArray` (`platform/native_reloc.c`).** `ptrSCVert` was
+   resolved as a single "leaf" resolve, leaving `scVert->v` as a raw 4-byte
+   disc offset read as 8 native bytes → garbage pointer + wrong `scVert++`
+   stride (20 vs 16 bytes). Added `Reloc64_SCVertArray` mirroring
+   `Reloc64_WaterVertArray`: allocates a native array, resolves `v` per entry,
+   copies 3 plain-int fields. Game now runs 20+ seconds past the
+   `AnimateQuadVertex` crash site with no new crash report.
+
 Background on why this is the architectural task — the MPK (and level) data are
 binary overlays whose **on-disc pointers are 4 bytes**:
 
