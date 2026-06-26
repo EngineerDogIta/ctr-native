@@ -622,6 +622,13 @@ void *Reloc64_ModelPack(void *mpkBase, const int *ptrMapOffsets, int numPtrs)
 #define DISC_WV_V    0x0
 #define DISC_WV_W    0x4
 
+// struct SCVert (on-disc size 0x10)
+#define DISC_SCV_SIZE          0x10
+#define DISC_SCV_V             0x0
+#define DISC_SCV_OFFSET_POS_XY 0x4
+#define DISC_SCV_OFFSET_POS_ZW 0x8
+#define DISC_SCV_OFFSET_COLOR  0xC
+
 // struct SpawnType1 header (on-disc size 0x4, then trailing void* array)
 #define DISC_ST1_SIZE  0x4
 #define DISC_ST1_COUNT 0x0
@@ -985,6 +992,23 @@ static struct WaterVert *Reloc64_WaterVertArray(struct Reloc64Ctx *ctx, uint32_t
 	return arr;
 }
 
+static struct SCVert *Reloc64_SCVertArray(struct Reloc64Ctx *ctx, uint32_t off, int count)
+{
+	if (off == 0 || count <= 0)
+		return NULL;
+
+	struct SCVert *arr = Reloc64_Alloc(count * (int)sizeof(struct SCVert));
+	for (int i = 0; i < count; i++)
+	{
+		char *src = ctx->base + off + (uint32_t)(i * DISC_SCV_SIZE);
+		arr[i].v = Reloc64_Resolve(ctx, *(uint32_t *)(src + DISC_SCV_V)); // leaf
+		arr[i].offset_pos_xy = *(int *)(src + DISC_SCV_OFFSET_POS_XY);
+		arr[i].offset_pos_zw = *(int *)(src + DISC_SCV_OFFSET_POS_ZW);
+		arr[i].offset_color_rgba = *(int *)(src + DISC_SCV_OFFSET_COLOR);
+	}
+	return arr;
+}
+
 static struct SpawnType1 *Reloc64_SpawnType1(struct Reloc64Ctx *ctx, uint32_t off)
 {
 	if (off == 0)
@@ -1210,7 +1234,7 @@ void *Reloc64_Level(void *levelBase, const int *ptrMapOffsets, int numPtrs)
 	dst->unk_170 = Reloc64_Resolve(&ctx, *(uint32_t *)(src + DISC_LEV_UNK_170));
 
 	dst->numSCVert = *(int *)(src + DISC_LEV_NUMSCVERT);
-	dst->ptrSCVert = Reloc64_Resolve(&ctx, *(uint32_t *)(src + DISC_LEV_PTRSCVERT)); // leaf
+	dst->ptrSCVert = Reloc64_SCVertArray(&ctx, *(uint32_t *)(src + DISC_LEV_PTRSCVERT), dst->numSCVert);
 
 	memcpy(&dst->stars, src + DISC_LEV_STARS, sizeof(dst->stars));
 	memcpy(dst->splitLines, src + DISC_LEV_SPLITLINES, sizeof(dst->splitLines));

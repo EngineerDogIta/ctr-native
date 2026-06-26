@@ -4229,7 +4229,7 @@ struct sData
 	// 8008c84c -- JpnTrial
 	// 8008dca8 -- EurRetail
 	// 80090d1c -- JpnRetail
-	int ptrLoadSaveObj;
+	uintptr_t ptrLoadSaveObj; // retail 4-byte PS1 ptr; uintptr_t = 4B on 32-bit (layout preserved), 8B on native 64-bit
 
 // 8008bd24 -- SepReview
 // 8008d8f8 -- UsaRetail
