@@ -9259,6 +9259,12 @@ static int Ovr226_800a1ee0_EmitWaterListQuadBlock(struct PushBuffer *pb, struct 
 static int Ovr226_800a1e30_DrawWaterBspList(struct VisMemBspListNode *slot, struct PushBuffer *pb, struct mesh_info *mesh, struct PrimMem *primMem,
                                             const int *visFaceList)
 {
+#ifdef CTR_NATIVE
+	// PSX address 0 was valid RAM; on native it is unmapped. Skip water rendering
+	// for levels that store no env-map texture (ptr_tex_waterEnvMap == NULL).
+	if (DrawLevelOvr1P_Scratch()->waterEnvMapPtr32 == 0)
+		return 1;
+#endif
 	Ovr226_800a1e30_SeedWaterListState();
 
 	while (slot != NULL)
